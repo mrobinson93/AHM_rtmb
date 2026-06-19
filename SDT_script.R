@@ -1,14 +1,27 @@
 library("RTMB")
 
+#suggestions for changes commented in below.
+
+# could add to both functions below by incorporating option to sample from distributions
+#as suggested by HS
+# note would have to constrain criteria to be strictly increasing if these
+#are not just fixed values.
+#also can add sigma and option for evsd (sig=1) or uvsd for each of the
+#probabiltiy and generating functions. would need to correct others to also
+#have sigma with its own sd. 
+#also might be nice to have this more flexible for any number of criteria
+#if that works can then experiment with different parameterizations
 gen_pars<-function(){
   list(dprime=.9,sd_ldprime=.2,crit=c(crit1=-1.7,crit2=0,crit3=.9))
 }
-
 init_pars<-function(){
   list(dprime=.1,sd_ldprime=.4,crit=c(crit1=-1.5,crit2=.2,crit3=.75))
 }
 
 optim_pars<-function(par,nT){
+  #here constrained on log to be positive in optimizer 
+  #and reverted to right scale below, but if randomly drawn values
+  #then need to check for zeros
   mu_ldprime<-log(par$dprime)
   list(mu_ldprime=mu_ldprime,lsd_ldprime=log(par$sd_ldprime),
        crit1=unname(par$crit[1]),lgap=log(diff(par$crit)),
@@ -16,21 +29,29 @@ optim_pars<-function(par,nT){
 }
 
 evsd_prob<-function(dprime,crit){
-  p<-c(pnorm(crit[1],mean=dprime,sd=1),diff(pnorm(crit,mean=dprime,sd=1)),
-       1-pnorm(crit[length(crit)],mean=dprime,sd=1))
+  p<-c(pnorm(crit[1],dprime,1),diff(pnorm(crit,dprime,1)),
+       1-pnorm(crit[length(crit)],dprime,1))
   p/sum(p)
 }
 
+#could change this to  loop through people n and trial n
 sim_data<-function(sim,nT=125,nC=150,gen_p=gen_pars()){
   seed<-sample.int(.Machine$integer.max,1);set.seed(seed)
   n_sig<-n_noz<-nC/2
   n_bin<-length(gen_p$crit)+1
+  #would need additional draws for sigma
   ldprime_i<-rnorm(nT,log(gen_p$dprime),gen_p$sd_ldprime)
+  #note that this noise is the same for all people because
+  #they have the same criteria. would be good to make this more 
+  #flexible
   noz_prob<-evsd_prob(0,gen_p$crit)
+  #convert back here to right scale
+  #again would need to modify below for uvsd
   sig_cts<-t(vapply(exp(ldprime_i),function(x)
     rmultinom(1,n_sig,evsd_prob(x,gen_p$crit))[,1],integer(n_bin)))
   noz_cts<-t(rmultinom(nT,n_noz,noz_prob))
   colnames(sig_cts)<-colnames(noz_cts)<-paste0("bin",seq_len(n_bin))
+  #save for checks and comparisons
   list(sim=sim,seed=seed,nT=nT,nC=nC,n_sig=n_sig,n_noz=n_noz,
        sig_cts=sig_cts,noz_cts=noz_cts,ldprime_i=ldprime_i)
 }
@@ -55,10 +76,9 @@ rtmb_obj<-function(sim_dat,start=init_pars()){
 }
 
 group_rec<-function(sdr,gen_p=gen_pars()){
-  tab<-as.data.frame(summary(sdr,"report"))
+  savtab<-as.data.frame(summary(sdr,"report"))
   gen_vals<-c(dprime=gen_p$dprime,sd_ldprime=gen_p$sd_ldprime,gen_p$crit)
-  out<-data.frame(par=names(gen_vals),gen=unname(gen_vals),
-                  estimate=tab[[1]],se=tab[[2]])
+  out<-data.frame(par=names(gen_vals),gen=unname(gen_vals),estimate=savtab[[1]],se=savtab[[2]])
   out$bias<-out$estimate-out$gen
   out$ci_low<-out$estimate-1.96*out$se
   out$ci_high<-out$estimate+1.96*out$se
@@ -68,11 +88,11 @@ group_rec<-function(sdr,gen_p=gen_pars()){
 
 indv_rec<-function(obj,opt,sim_dat){
   obj$fn(opt$par);
-  pl<-obj$env$parList(obj$env$last.par.best)
+  indl<-obj$env$parList(obj$env$last.par.best)
   data.frame(sim=sim_dat$sim,
-             ind=seq_along(pl$ldprime_i),
-             ldprime_gen=sim_dat$ldprime_i,ldprime_est=as.numeric(pl$ldprime_i),
-             dprime_gen=exp(sim_dat$ldprime_i),dprime_est=exp(as.numeric(pl$ldprime_i)))
+             ind=seq_along(indl$ldprime_i),
+             ldprime_gen=sim_dat$ldprime_i,ldprime_est=as.numeric(indl$ldprime_i),
+             dprime_gen=exp(sim_dat$ldprime_i),dprime_est=exp(as.numeric(indl$ldprime_i)))
 }
 
 dat<-sim_data(sim=1);
