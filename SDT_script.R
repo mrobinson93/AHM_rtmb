@@ -1,121 +1,100 @@
 library("RTMB")
 
-#suggestions for changes commented in below.
+nT <- 125
+nC <- 150
+n_sig <- floor(nC/2)
+n_noz <- nC - n_sig
 
-# could add to both functions below by incorporating option to sample from distributions
-#as suggested by HS
-# note would have to constrain criteria to be strictly increasing if these
-#are not just fixed values.
-#also can add sigma and option for evsd (sig=1) or uvsd for each of the
-#probabiltiy and generating functions. would need to correct others to also
-#have sigma with its own sd. 
-#also might be nice to have this more flexible for any number of criteria
-#if that works can then experiment with different parameterizations
-gen_pars<-function(){
-  list(dprime=.9,sd_ldprime=.2,crit=c(crit1=-1.7,crit2=0,crit3=.9))
-}
-init_pars<-function(){
-  list(dprime=.1,sd_ldprime=.4,crit=c(crit1=-1.5,crit2=.2,crit3=.75))
-}
+gen_pars <- list(mu=.9, sigma = 1.2, sd_mu=.2, sd_sigma=.2, rho_log = .4,
+                 crit=c(crit1=-1.7,crit2=0,crit3=.9), sd_crit = .25)
 
-optim_pars<-function(par,nT){
-  #here constrained on log to be positive in optimizer 
-  #and reverted to right scale below, but if randomly drawn values
-  #then need to check for zeros
-  mu_ldprime<-log(par$dprime)
-  list(mu_ldprime=mu_ldprime,lsd_ldprime=log(par$sd_ldprime),
-       crit1=unname(par$crit[1]),lgap=log(diff(par$crit)),
-       ldprime_i=rep(mu_ldprime,nT))
-}
+init_pars <- list(mu=.1, sigma = 1, sd_lmu=.4, sd_lsigma = .1, rho_log = 0,
+                  crit=c(crit1=-1.5,crit2=.2,crit3=.75), sd_crit = .1)
 
-evsd_prob<-function(dprime,crit){
-  p<-c(pnorm(crit[1],dprime,1),diff(pnorm(crit,dprime,1)),
-       1-pnorm(crit[length(crit)],dprime,1))
-  p/sum(p)
-}
+#corr version
+#gen_pars <- list(mu=.9, sigma = 1.2, sd_mu=.2, sd_sigma=.2, 
+#                 crit=c(crit1=-1.7,crit2=0,crit3=.9), sd_crit = .25)
 
-#could change this to  loop through people n and trial n
-sim_data<-function(sim,nT=125,nC=150,gen_p=gen_pars()){
-  seed<-sample.int(.Machine$integer.max,1);set.seed(seed)
-  n_sig<-n_noz<-nC/2
-  n_bin<-length(gen_p$crit)+1
-  #would need additional draws for sigma
-  ldprime_i<-rnorm(nT,log(gen_p$dprime),gen_p$sd_ldprime)
-  #note that this noise is the same for all people because
-  #they have the same criteria. would be good to make this more 
-  #flexible
-  noz_prob<-evsd_prob(0,gen_p$crit)
-  #convert back here to right scale
-  #again would need to modify below for uvsd
-  sig_cts<-t(vapply(exp(ldprime_i),function(x)
-    rmultinom(1,n_sig,evsd_prob(x,gen_p$crit))[,1],integer(n_bin)))
-  noz_cts<-t(rmultinom(nT,n_noz,noz_prob))
-  colnames(sig_cts)<-colnames(noz_cts)<-paste0("bin",seq_len(n_bin))
-  #save for checks and comparisons
-  list(sim=sim,seed=seed,nT=nT,nC=nC,n_sig=n_sig,n_noz=n_noz,
-       sig_cts=sig_cts,noz_cts=noz_cts,ldprime_i=ldprime_i)
-}
+#init_pars <- list(mu=.1, sigma = 1, sd_lmu=.4, sd_lsigma = .1, 
+#                  crit=c(crit1=-1.5,crit2=.2,crit3=.75), sd_crit = .1)
 
-rtmb_obj<-function(sim_dat,start=init_pars()){
-  dat_list<-list(sig_cts=sim_dat$sig_cts,noz_cts=sim_dat$noz_cts)
-  par_list<-optim_pars(start,nrow(sim_dat$sig_cts))
-  nll<-function(pars){
-    getAll(dat_list,pars,warn=FALSE)
-    r_dprime<-exp(mu_ldprime); r_sd_ldprime<-exp(lsd_ldprime); r_crit<-crit1+c(0,cumsum(exp(lgap)))
-    noz_prob<-evsd_prob(0,r_crit)
-    nllout<- -sum(dnorm(ldprime_i,mu_ldprime,r_sd_ldprime,log=TRUE))
-    for(i in seq_len(nrow(sig_cts))){
-      sig_prob<-evsd_prob(exp(ldprime_i[i]),r_crit)
-      nllout<-nllout-sum(sig_cts[i,]*log(sig_prob+1e-12))
-      nllout<-nllout-sum(noz_cts[i,]*log(noz_prob+1e-12))
-    }
-    ADREPORT(r_dprime);ADREPORT(r_sd_ldprime);ADREPORT(r_crit)
-    nllout
-  }
-  MakeADFun(nll,par_list,random="ldprime_i")
-}
+#cor_mat <- matrix(c(1, gen_pars$rho_log, gen_pars$rho_log, 1))
+#sd_mat <- diag(c(gen_pars$sd_mu,gen_pars$sd_sigma))
+#cov_mat <- sd_mat%*%cor_mat%*%sd_mat
+#add_corr <- matrix(rnorm(nT*2),nT,2)%*%chol(cov_mat)
 
-group_rec<-function(sdr,gen_p=gen_pars()){
-  savtab<-as.data.frame(summary(sdr,"report"))
-  gen_vals<-c(dprime=gen_p$dprime,sd_ldprime=gen_p$sd_ldprime,gen_p$crit)
-  out<-data.frame(par=names(gen_vals),gen=unname(gen_vals),estimate=savtab[[1]],se=savtab[[2]])
-  out$bias<-out$estimate-out$gen
-  out$ci_low<-out$estimate-1.96*out$se
-  out$ci_high<-out$estimate+1.96*out$se
-  out$covered<-out$ci_low<=out$gen&out$gen<=out$ci_high
-  out
-}
+#lmu_pi <- log(gen_pars$mu) + add_corr[,1]
+#lsigma_pi <- log(gen_pars$sigma) + add_corr[,1]
 
-indv_rec<-function(obj,opt,sim_dat){
-  obj$fn(opt$par);
-  indl<-obj$env$parList(obj$env$last.par.best)
-  data.frame(sim=sim_dat$sim,
-             ind=seq_along(indl$ldprime_i),
-             ldprime_gen=sim_dat$ldprime_i,ldprime_est=as.numeric(indl$ldprime_i),
-             dprime_gen=exp(sim_dat$ldprime_i),dprime_est=exp(as.numeric(indl$ldprime_i)))
+sdt_prob <- function(mu,sigma,crit){
+    cum_p <- pnorm(crit,mu,sigma)
+    p <- c(cum_p[1], diff(cum_p),pnorm((mu-crit[3])/sigma))
+    p/sum(p)}
+
+# participant effects
+lmu_pi <- rnorm(nT, log(gen_pars$mu), gen$sd_lmu)
+lsigma_pi <- rnorm(nT, log(gen_pars$sigma), gen$sd_lsigma)
+c_diff_pi <- rnorm(nT, 0, gen$sd_crit)
+
+mu_pi <- exp(lmu_pi)
+sigma_pi <- exp(lsigma_pi)
+crit_pi <- cbind( gen_par$crit[1] + c_diff_pi, gen_par$crit[2] + c_diff_pi, gen_par$crit[3] + c_diff_pi,)
+
+sig_cts <- noz_cts <- matrix(0,nT,4)
+
+#sample freqs
+for (i in seq_len(nT)) 
+  { temp_cnts_sig <- rmultinom(1, n_sig, sdt_prob(mu_pi[i],sigma_pi[i],crit_pi[i,]))
+        sig_cts[i,] <- temp_cnts_sig [,1] 
+    temp_cnts_noz <- rmultinom(1, n_sig, sdt_prob(0,1,crit_pi[i,]))
+        noz_cts[i,] <- temp_cnts_noz [,1] 
+   }
+
+dat <- list(sig_cts, noz_cts)
+
+pars <- list(m_lmu = log(init_pars$mu),m_lsigma=log(init_pars$sigma), log_sd_lmu=log(init_pars$sd_lmu), log_sd_lsigma=log(init_pars$sd_lsigma),
+             crit1 = init_pars$crit[1], crit_diff = log(diff(init_pars%crit)), log_sd_crit = log(init_pars$sd_crit),
+             lmu_pi = rep(log(init_pars$mu), nT), lsigma_pi = rep(log(init_pars$sigma),nT), crit_diff_pi = rep(0,nT))
+
+nll <- function(pars) { 
+    getAll(dat, pars, warn = FALSE)
+    sd_mu <- exp(log_sd_lmu)
+    sd_sigma <- exp(log_sd_lsigma)
+    sd_crit <- exp(log_sd_crit)
+    crit <- crit1 + c(0, cumsum(exp(crit_diff)))
+    nllout <- -sum(dnorm(lmu_pi, m_lmu, sd_mu, log = TRUE))
+    nllout <- nllout -sum(dnorm(lsigma_pi, m_lsigma, sd_sigma, log = TRUE))
+    nllout <- nllout -sum(dnorm(crit_diff_pi, 0, sd_crit, log = TRUE))
+    for (i in seq_len(nrow(sig_cts))) {
+        crit_ind <- crit + crit_diff_pi[i]
+        mu_ind <- exp(lmu_pi[i])
+        sigma_ind <- exp(lsigma_pi[i])
+        sig_prob <- sdt_prob(mu_ind, sigma_ind, crit_ind)
+        noz_prob <- sdt_prob(0, 1, crit_ind)
+        sig_prob <- sig_prob + 1e-15
+        noz_prob <- noz_prob + 1e-15
+        sig_loglik <- sum(sig_cts[i,]*log(sig_prob))
+        noz_loglik <- sum(noz_cts[i,]*log(noz_prob))
+        nllout <- nllout - sig_loglik - noz_loglik
+      }
+    med_mu <- exp(m_lmu) 
+    ADREPORT(med_mu)
+    med_sigma <- exp(m_lsigma)
+    ADREPORT(med_sigma)
+    ADREPORT(sd_mu)
+    ADREPORT(sd_sigma)
+    ADREPORT(crit)
+    ADREPORT(sd_crit)
+ nllout
 }
 
-dat<-sim_data(sim=1);
-obj<-rtmb_obj(dat)
-start_nll<-obj$fn(obj$par);
-start_grad<-obj$gr(obj$par)
-opt<-nlminb(obj$par,obj$fn,obj$gr);
-sdr<-sdreport(obj,par.fixed=opt$par)
+rtmb_obj<-MakeADFun(nll,pars,random=c("lmu_pi","lsigma_pi","crit_diff_pi"))
 
-fit_check<-data.frame(
-  code=opt$convergence,
-  msg=opt$message,
-  start_nll=start_nll,
-  final_nll=opt$objective,
-  max_start_grad=max(abs(start_grad)),
-  pdHess=isTRUE(sdr$pdHess))
+opt <- nlminb(rmtb_obj$par, rtmb_obj$fn, rtmb_obj$gr)
 
-recovered<-group_rec(sdr,gen_pars())
-ind_rec<-indv_rec(obj,opt,dat)
+stdr <- sdreport(obj,par.fixed = opt$par)
+print(summary(stdr,"report"))
 
-fit_check;recovered
-head(ind_rec)
-cor(ind_rec$dprime_gen,ind_rec$dprime_est)
-plot(ind_rec$dprime_gen,ind_rec$dprime_est,xlab="generative ind dprime",
-     ylab="recovered ind dprime");
-abline(0,1)
+print(opt$message)
+print(opt$convergence)
+print(stdr$pdHess)
