@@ -54,7 +54,9 @@ dat <- list(sig_cts, noz_cts)
 
 pars <- list(m_lmu = log(init_pars$mu),m_lsigma=log(init_pars$sigma), log_sd_lmu=log(init_pars$sd_lmu), log_sd_lsigma=log(init_pars$sd_lsigma),
              crit1 = init_pars$crit[1], crit_diff = log(diff(init_pars%crit)), log_sd_crit = log(init_pars$sd_crit),
-             lmu_pi = rep(log(init_pars$mu), nT), lsigma_pi = rep(log(init_pars$sigma),nT), crit_diff_pi = rep(0,nT))
+             lmu_pi = rep(log(init_pars$mu), nT), lsigma_pi = rep(log(init_pars$sigma),nT), crit_diff_pi = rep(0,nT)) 
+             
+             #,rho = 0)
 
 nll <- function(pars) { 
     getAll(dat, pars, warn = FALSE)
@@ -62,6 +64,12 @@ nll <- function(pars) {
     sd_sigma <- exp(log_sd_lsigma)
     sd_crit <- exp(log_sd_crit)
     crit <- crit1 + c(0, cumsum(exp(crit_diff)))
+  #  conv_rho <- rho     possible to restrict? use bounds
+  #  Rmat <- matrix(c(1,cov_rho,cov_rho,1),2,2)
+  #  Dmat <- diag(c(sd_mu,sd_sigma))
+  #  CovMat <- Dmat%*%Rmat%*%Dmat
+  # nllout <- -sum(RTMB::dmvnorm(cbind(lmu_pi, m_lmu), mu = c(m_lmu, m_lsigma), Sigma = CovMat, log = TRUE))
+  
     nllout <- -sum(dnorm(lmu_pi, m_lmu, sd_mu, log = TRUE))
     nllout <- nllout -sum(dnorm(lsigma_pi, m_lsigma, sd_sigma, log = TRUE))
     nllout <- nllout -sum(dnorm(crit_diff_pi, 0, sd_crit, log = TRUE))
@@ -85,6 +93,7 @@ nll <- function(pars) {
     ADREPORT(sd_sigma)
     ADREPORT(crit)
     ADREPORT(sd_crit)
+  # ADREPORT(conv_rho)
  nllout
 }
 
