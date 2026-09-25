@@ -5,17 +5,16 @@ nC <- 150
 n_sig <- floor(nC/2)
 n_noz <- nC - n_sig
 
-gen_pars <- list(mu=.9, sigma = 1.2, sd_mu=.2, sd_sigma=.2, rho_log = .4,
+gen_pars <- list(mu=.9, sigma = 1.2, sd_mu=.2, sd_sigma=.2, 
                  crit=c(crit1=-1.7,crit2=0,crit3=.9), sd_crit = .25)
 
-init_pars <- list(mu=.1, sigma = 1, sd_lmu=.4, sd_lsigma = .1, rho_log = 0,
+init_pars <- list(mu=.1, sigma = 1, sd_lmu=.4, sd_lsigma = .1, 
                   crit=c(crit1=-1.5,crit2=.2,crit3=.75), sd_crit = .1)
 
-#corr version
-#gen_pars <- list(mu=.9, sigma = 1.2, sd_mu=.2, sd_sigma=.2, 
+#gen_pars <- list(mu=.9, sigma = 1.2, sd_mu=.2, sd_sigma=.2, rho_log = .4,
 #                 crit=c(crit1=-1.7,crit2=0,crit3=.9), sd_crit = .25)
 
-#init_pars <- list(mu=.1, sigma = 1, sd_lmu=.4, sd_lsigma = .1, 
+#init_pars <- list(mu=.1, sigma = 1, sd_lmu=.4, sd_lsigma = .1, rho_log = 0,
 #                  crit=c(crit1=-1.5,crit2=.2,crit3=.75), sd_crit = .1)
 
 #cor_mat <- matrix(c(1, gen_pars$rho_log, gen_pars$rho_log, 1))
